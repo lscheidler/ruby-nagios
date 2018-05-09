@@ -14,19 +14,29 @@
 
 require "nagios/version"
 
+require "nagios/status"
+require "nagios/expectations"
+
 # nagios module for plugin development
 module Nagios
   # basis class for nagios plugins
   class Plugin
+    include Expectations
+
     # @yield block with check implementation
     def initialize
       set_defaults
+      set_plugin_defaults
 
       begin
         yield
       rescue => exception
-        @msg = exception.class.to_s + ' ' + exception.message
-        unknown
+        msg = exception.class.to_s + ' ' + exception.message
+        if @debug
+          $stderr.puts exception.class.to_s + ' ' + exception.message
+          $stderr.puts exception.backtrace.join("\n  ")
+        end
+        @unknown << msg
       end
 
       exit_with_msg
@@ -35,38 +45,60 @@ module Nagios
     # set defaults
     def set_defaults
       ok
-      @msg = 'Everything ok.'
       @perfdata = []
+      @with_perfdata = true
+
+      @ok = Nagios::Status.new :ok, 0, default_message: 'Everything ok.'
+      @warning = Nagios::Status.new :warning, 1
+      @critical = Nagios::Status.new :critical, 2
+      @unknown = Nagios::Status.new :unknown, 3
+    end
+
+    # set plugin defaults
+    def set_plugin_defaults
     end
 
     # set status to ok
-    def ok
-      @status = :ok
-      @status_code = 0
+    def ok msg=nil
+      @ok << msg unless msg.nil?
     end
 
     # set status to warning
-    def warning
-      @status = :warning
-      @status_code = 1
+    def warning msg
+      @warning << msg
     end
 
     # set status to critical
-    def critical
-      @status = :critical
-      @status_code = 2
+    def critical msg
+      @critical << msg
     end
 
     # set status to unknown
-    def unknown
-      @status = :unknown
-      @status_code = 3
+    def unknown msg=nil
+      @unknown << msg unless msg.nil?
+    end
+
+    def failed?
+      (not @warning.empty? or not @critical.empty? or not @unknown.empty?)
     end
 
     # exit nagios check with current status and corresponding status code
     def exit_with_msg
-      puts @status.to_s.upcase + ': ' + @msg.to_s
-      exit @status_code
+      msg = []
+      status = @ok
+      [ @ok, @warning, @critical, @unknown ].each do |level|
+        if not level.empty?
+          status = level
+          msg.unshift level.name.to_s + '(' + level.messages.join(', ') + ')'
+        end
+      end
+
+      msg = [@ok.default_message] if status == @ok and msg.empty?
+
+      print status.name.to_s.upcase + ': ' + msg.join(' ')
+      print ' | ' + @perfdata.join(' ') if @with_perfdata and not @perfdata.empty?
+      puts
+      exit status.code
     end
   end
 end

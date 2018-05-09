@@ -12,8 +12,34 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# nagios module for plugin development
 module Nagios
-  # version
-  VERSION = "0.1.1"
+  # nagios status representation
+  class Status
+    attr_reader :name, :code, :default_message, :messages
+
+    def initialize name, code, default_message: nil
+      @name = name
+      @code = code
+      @default_message = default_message
+
+      @messages = []
+    end
+
+    # append message
+    #
+    # @param message [String] message to append
+    def << message
+      @messages << message
+    end
+
+    # is status messages empty
+    def empty?
+      @messages.empty?
+    end
+
+    # length of status messages
+    def length
+      @messages.length
+    end
+  end
 end
